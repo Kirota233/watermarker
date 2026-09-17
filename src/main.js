@@ -155,9 +155,9 @@ if (isFirefox) {
   }
   settingEngine.value = "ffmpeg";
   ffmpegSettingsBar.style.display = "flex";
-  if (engineHint) engineHint.textContent = "💡 提示：Firefox 的隐私策略会拦截硬件加速缓存，已为您固定使用高兼容的 FFmpeg 引擎。";
+  if (engineHint) engineHint.textContent = "💡 提示：Firefox 的隐私策略会拦截硬件加速缓存，WebAV不可用";
 } else if (isChromium) {
-  if (engineHint) engineHint.innerHTML = "💡 提示：Edge/Chrome 完美支持极速硬件加速。若遇特殊视频需切回 FFmpeg 模式，系统将强制单线程以防死锁。";
+  if (engineHint) engineHint.innerHTML = "💡 提示：Edge/Chrome 支持硬件加速。若需切回 FFmpeg 模式，仅支持单线程";
 } else {
   if (engineHint) engineHint.textContent = "💡 提示：推荐优先体验 WebAV 硬件加速。如遇视频格式报错可切回 FFmpeg 模式保底。";
 }
