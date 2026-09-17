@@ -1,0 +1,7 @@
+node_modules/
+dist/
+test.mp4
+public/ffmpeg/
+public/ffmpeg-mt/
+public/ffmpeg-worker/
+src/ffmpeg-worker/

@@ -1,0 +1,42 @@
+:root {
+  color: #f4f1ea;
+  background: #141311;
+  font-family: Inter, "Microsoft YaHei", system-ui, sans-serif;
+  font-synthesis: none;
+}
+* { box-sizing: border-box; }
+body { margin: 0; min-width: 320px; }
+.shell { width: min(820px, calc(100% - 32px)); margin: 0 auto; padding: 8vh 0 40px; }
+.hero { margin-bottom: 28px; }
+.eyebrow { color: #b9a68d; font-size: 12px; letter-spacing: .18em; margin: 0 0 12px; }
+h1 { font-size: clamp(30px, 6vw, 52px); line-height: 1.05; margin: 0; letter-spacing: -.04em; }
+.subtitle { color: #a9a39b; margin: 14px 0 0; font-size: 16px; }
+.panel { background: #211f1c; border: 1px solid #3b3833; border-radius: 20px; padding: 20px; box-shadow: 0 20px 70px #0005; }
+.drop-zone { min-height: 210px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 9px; border: 1px dashed #786b59; border-radius: 14px; color: #a9a39b; cursor: pointer; transition: .2s; }
+.drop-zone:hover, .drop-zone.is-dragging { background: #2b2722; border-color: #d2b181; color: #f4f1ea; }
+.drop-zone input { display: none; }
+.drop-icon { font-size: 42px; font-weight: 200; line-height: .8; color: #d2b181; }
+.drop-zone strong { color: #f4f1ea; font-size: 17px; }
+.file-area { margin-top: 24px; }
+.section-heading { display: flex; justify-content: space-between; color: #ddd6cb; font-size: 14px; margin-bottom: 9px; }
+.text-button { background: none; border: 0; color: #b9a68d; cursor: pointer; }
+.file-list { list-style: none; padding: 0; margin: 0; border: 1px solid #3b3833; border-radius: 10px; overflow: hidden; }
+.file-list li { display: flex; justify-content: space-between; gap: 12px; padding: 11px 13px; color: #d8d1c7; border-bottom: 1px solid #35322e; font-size: 14px; }
+.file-list li:last-child { border-bottom: 0; }
+.file-list .empty { color: #827c73; justify-content: center; }
+.file-list button { background: none; color: #9e9182; border: 0; cursor: pointer; }
+.action-row { display: flex; align-items: center; gap: 16px; margin-top: 24px; }
+.primary-button { border: 0; border-radius: 9px; background: #d2b181; color: #211f1c; padding: 13px 25px; font-size: 15px; font-weight: 700; cursor: pointer; white-space: nowrap; }
+.primary-button:disabled { opacity: .35; cursor: not-allowed; }
+.status-wrap { flex: 1; min-width: 0; color: #a9a39b; font-size: 13px; }
+.progress { height: 4px; margin-top: 9px; background: #393530; border-radius: 10px; overflow: hidden; }
+#progress-bar { width: 0; height: 100%; background: #d2b181; transition: width .2s; }
+.note, .privacy { color: #827c73; font-size: 12px; line-height: 1.6; }
+.note { margin: 20px 0 0; }
+.privacy { text-align: center; margin-top: 18px; }
+@media (max-width: 560px) {
+  .shell { width: min(100% - 22px, 820px); padding-top: 38px; }
+  .panel { padding: 13px; }
+  .action-row { align-items: stretch; flex-direction: column; }
+  .primary-button { width: 100%; }
+}
