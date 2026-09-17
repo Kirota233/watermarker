@@ -18,8 +18,8 @@ const app = document.querySelector("#app");
 app.innerHTML = `
   <main class="shell">
     <section class="hero">
-      <p class="eyebrow">LOCAL VIDEO TOOL</p>
-      <h1>视频样片水印工具</h1>
+      <p class="eyebrow">本地视频工具</p>
+      <h1>一起加样片水印吧！</h1>
       <p class="subtitle">视频在你的浏览器本地处理，不上传服务器。</p>
     </section>
     <section class="panel">
