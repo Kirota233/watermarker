@@ -206,15 +206,16 @@ async function processFile(file, index, total) {
     "-map", "0:a?",
     "-c:v", "libx264",
     "-preset", "ultrafast",
-    "-crf", "28",
+    "-crf", "23",
     "-tune", "fastdecode",
-    "-c:a", "aac",
+    "-c:a", "copy",
     "-shortest",
   ];
 
   // Multi-thread encoding flags
   if (canUseMT) {
-    execArgs.push("-threads", "4");
+    const threadCount = navigator.hardwareConcurrency ? navigator.hardwareConcurrency.toString() : "4";
+    execArgs.push("-threads", threadCount);
   }
 
   execArgs.push(outputName);
