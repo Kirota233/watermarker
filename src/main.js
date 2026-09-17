@@ -20,7 +20,7 @@ const app = document.querySelector("#app");
 app.innerHTML = `
   <main class="shell">
     <section class="hero">
-      <h1>一起加样片水印吧！</h1>
+      <h1>一起来导样片吧！</h1>
     </section>
     <section class="panel">
       <label class="drop-zone" id="drop-zone" for="video-input">
@@ -28,6 +28,8 @@ app.innerHTML = `
         <span class="drop-icon">＋</span>
         <strong>拖放视频到这里</strong>
         <span>或点击选择视频，可一次处理多个文件</span>
+      </label>
+      
       <!-- Settings Bar -->
       <div class="settings-bar" id="engine-bar">
         <label class="select-tag">
@@ -99,6 +101,10 @@ app.innerHTML = `
         </details>
       </div>
     </section>
+    
+    <footer class="footer" style="text-align: center; margin-top: 24px; color: #827c73; font-size: 13px;">
+      <p>🔒 纯本地浏览器处理，视频及数据绝对安全，不上传任何云端服务器。</p>
+    </footer>
   </main>
 `;
 
@@ -483,16 +489,18 @@ async function startProcessing() {
     // Parse error logs to display user-friendly diagnostic message
     let reason = "处理过程中发生未知错误。";
     const errStr = String(error?.message || error || "");
-    const logsTail = ffmpegLogs.slice(-25).join("\\n");
+    const logsTail = ffmpegLogs.slice(-25).join("\n");
     
-    if (errStr.includes("SharedArrayBuffer") || logsTail.includes("SharedArrayBuffer")) {
+    if (errStr.includes("GetDirectory") || errStr.includes("opfs") || errStr.includes("SecurityError")) {
+      reason = "浏览器本地文件系统(OPFS)访问被拒绝。可能由于您使用了“无痕/隐私模式”，或浏览器禁用了本地存储。建议退出无痕模式，或在处理引擎中切换回“FFmpeg WASM (高兼容)”引擎。";
+    } else if (errStr.includes("SharedArrayBuffer") || logsTail.includes("SharedArrayBuffer")) {
       reason = "浏览器环境未开启 SharedArrayBuffer 多线程支持。建议刷新页面或在本地测试。";
     } else if (errStr.includes("memory") || errStr.includes("Out of Memory") || logsTail.includes("Out of Memory") || logsTail.includes("OOM")) {
       reason = "浏览器 WebAssembly 内存不足。处理过大或超高清视频时耗尽了内存，建议关闭其他标签页或处理较小的视频。";
     } else if (logsTail.includes("Invalid data found") || logsTail.includes("moov atom not found")) {
-      reason = "视频文件数据损坏或格式不受支持，FFmpeg 无法正常解码该视频。";
+      reason = "视频文件数据损坏或格式不受支持，无法正常解码该视频。";
     } else if (errStr.includes("startsWith") || errStr.includes("Aborted") || logsTail.includes("Error")) {
-      reason = "FFmpeg 底层执行异常终止。通常是由于视频容器格式不规范或音频通道不支持导致。";
+      reason = "底层执行异常终止。通常是由于视频容器格式不规范或通道不支持导致。";
     } else {
       reason = `执行失败：${errStr}`;
     }
