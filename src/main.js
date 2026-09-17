@@ -185,8 +185,14 @@ let watermarkCached = false;
 
 async function processFile(file, index, total) {
   const t0 = performance.now();
+  
+  // Extract original extension to maintain container format (allows safe audio copy)
+  const match = file.name.match(/\.([^.]+)$/);
+  const ext = match ? match[1].toLowerCase() : "mp4";
+  const outputExt = ["mp4", "mov", "mkv", "webm", "avi", "m4v"].includes(ext) ? ext : "mp4";
+  
   const inputName = `input_${index}_${file.name.replace(/[^a-zA-Z0-9._-]/g, "_")}`;
-  const outputName = `output_${index}.mp4`;
+  const outputName = `output_${index}.${outputExt}`;
 
   await ffmpeg.writeFile(inputName, await fetchFile(file));
 
@@ -208,7 +214,7 @@ async function processFile(file, index, total) {
     "-preset", "ultrafast",
     "-crf", "23",
     "-tune", "fastdecode",
-    "-c:a", "aac",
+    "-c:a", "copy",
     "-shortest",
   ];
 
@@ -223,11 +229,16 @@ async function processFile(file, index, total) {
   await ffmpeg.exec(execArgs);
 
   const data = await ffmpeg.readFile(outputName);
-  const blob = new Blob([data.buffer], { type: "video/mp4" });
+  
+  const mimeTypes = {
+    mp4: "video/mp4", mov: "video/quicktime", mkv: "video/x-matroska",
+    webm: "video/webm", avi: "video/x-msvideo", m4v: "video/mp4"
+  };
+  const blob = new Blob([data.buffer], { type: mimeTypes[outputExt] || "video/mp4" });
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
   link.href = url;
-  link.download = `${file.name.replace(/\.[^.]+$/, "")}样片.mp4`;
+  link.download = `${file.name.replace(/\.[^.]+$/, "")}样片.${outputExt}`;
   link.click();
   URL.revokeObjectURL(url);
   await ffmpeg.deleteFile(inputName);
