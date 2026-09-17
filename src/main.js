@@ -310,6 +310,7 @@ async function processFile(file, index, total) {
 
   const getExecArgs = (audioCodec) => {
     const args = [
+      "-y",
       "-i", inputName,
       "-i", "watermark.png",
       "-filter_complex",
@@ -330,6 +331,44 @@ async function processFile(file, index, total) {
     return args;
   };
 
+  const executeFFmpegWithWatchdog = async (args) => {
+    let lastActivityTime = performance.now();
+    let isDone = false;
+    
+    const poke = () => { lastActivityTime = performance.now(); };
+    ffmpeg.on("log", poke);
+    ffmpeg.on("progress", poke);
+
+    const execPromise = ffmpeg.exec(args).then((ret) => {
+      isDone = true;
+      return ret;
+    }).catch(err => {
+      isDone = true;
+      throw err;
+    });
+    
+    const watchdogPromise = new Promise((_, reject) => {
+      const interval = setInterval(() => {
+        if (isDone) {
+          clearInterval(interval);
+          return;
+        }
+        if (performance.now() - lastActivityTime > 20000) {
+          clearInterval(interval);
+          ffmpeg.terminate(); // Force kill the stuck instance
+          reject(new Error("FFmpeg 引擎超过 20 秒无响应，发生底层死锁。建议在上方将加速模式改为“单线程”后重试。"));
+        }
+      }, 2000);
+    });
+
+    try {
+      return await Promise.race([execPromise, watchdogPromise]);
+    } finally {
+      ffmpeg.off("log", poke);
+      ffmpeg.off("progress", poke);
+    }
+  };
+
   const audioPref = settingAudio.value; // 'auto' or 'aac'
   let success = false;
   let activeAudioCodec = "直拷";
@@ -341,7 +380,7 @@ async function processFile(file, index, total) {
   if (audioPref === "auto") {
     updateStatus("直拷");
     try {
-      const ret = await ffmpeg.exec(getExecArgs("copy"));
+      const ret = await executeFFmpegWithWatchdog(getExecArgs("copy"));
       if (ret === 0) success = true;
     } catch (err) {
       console.warn("音频直接复制遇到兼容问题，准备回退", err);
@@ -352,16 +391,16 @@ async function processFile(file, index, total) {
     activeAudioCodec = "AAC转码";
     updateStatus(activeAudioCodec);
     try {
-      if (audioPref === "auto") {
-        // Need to reload if we tried copy and it failed
-        ffmpeg.terminate();
+      if (audioPref === "auto" || !ffmpeg.loaded) {
+        // Need to reload if we tried copy and it failed, or watchdog killed it
+        if (ffmpeg.loaded) ffmpeg.terminate();
         ffmpeg = new FFmpeg();
         await loadFFmpeg();
         await ffmpeg.writeFile(inputName, await fetchFile(file));
         await ffmpeg.writeFile("watermark.png", await fetchFile(watermarkUrl));
         watermarkCached = true;
       }
-      const retFallback = await ffmpeg.exec(getExecArgs("aac"));
+      const retFallback = await executeFFmpegWithWatchdog(getExecArgs("aac"));
       if (retFallback !== 0) {
         throw new Error(`处理失败，FFmpeg 退出码：${retFallback}`);
       }
