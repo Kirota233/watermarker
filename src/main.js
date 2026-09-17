@@ -13,6 +13,7 @@ const watermarkUrl = "/watermark.png";
 
 /* ---- Detect multi-thread support ---- */
 const canUseMT = typeof SharedArrayBuffer !== "undefined";
+const threadCount = canUseMT ? Math.min(navigator.hardwareConcurrency || 4, 8) : 1;
 
 const app = document.querySelector("#app");
 app.innerHTML = `
@@ -45,10 +46,31 @@ app.innerHTML = `
           <div class="progress"><div id="progress-bar"></div></div>
         </div>
       </div>
-      <p class="note">
-        模式：<strong>${canUseMT ? "⚡ 多线程加速" : "单线程"}</strong>
-        &nbsp;|&nbsp; 输出文件名为"原文件名样片"，保存到浏览器的下载目录。水印会强制拉伸到每个视频的完整分辨率。
-      </p>
+
+      <!-- 当前模式与运行参数指示 -->
+      <div class="mode-tags">
+        <span class="tag tag-highlight" id="thread-mode-tag">
+          ${canUseMT ? `⚡ 多线程加速 (${threadCount} 线程)` : "单线程模式"}
+        </span>
+        <span class="tag" id="video-codec-tag">视频编码：H.264 (CRF 23 · ultrafast)</span>
+        <span class="tag tag-audio" id="audio-mode-tag">音频流：直接复制 (无损原声直出)</span>
+        <span class="tag">输出封装：MP4 (原文件名样片)</span>
+      </div>
+
+      <!-- 报错日志与原因诊断卡片 -->
+      <div id="error-card" class="error-card" style="display: none;">
+        <div class="error-header">
+          <span class="error-title">⚠️ 处理遇到错误</span>
+          <button id="close-error" class="text-button" type="button">关闭提示</button>
+        </div>
+        <p id="error-summary" class="error-summary"></p>
+        <details class="error-details" open>
+          <summary>查看详细日志与报错原因</summary>
+          <pre id="error-log-content" class="error-log-content"></pre>
+        </details>
+      </div>
+
+      <p class="note">输出文件将保存到浏览器的下载目录。水印会强制拉伸到每个视频的完整分辨率。</p>
     </section>
     <p class="privacy">本页面只负责提供工具。视频、音频和处理结果均留在本机浏览器中。</p>
   </main>
@@ -56,6 +78,7 @@ app.innerHTML = `
 
 let ffmpeg = new FFmpeg();
 const files = [];
+const ffmpegLogs = [];
 const input = document.querySelector("#video-input");
 const dropZone = document.querySelector("#drop-zone");
 const fileList = document.querySelector("#file-list");
@@ -63,6 +86,15 @@ const clearButton = document.querySelector("#clear-button");
 const startButton = document.querySelector("#start-button");
 const status = document.querySelector("#status");
 const progressBar = document.querySelector("#progress-bar");
+const audioModeTag = document.querySelector("#audio-mode-tag");
+const errorCard = document.querySelector("#error-card");
+const errorSummary = document.querySelector("#error-summary");
+const errorLogContent = document.querySelector("#error-log-content");
+const closeErrorBtn = document.querySelector("#close-error");
+
+closeErrorBtn.addEventListener("click", () => {
+  errorCard.style.display = "none";
+});
 
 function isVideo(file) {
   return VIDEO_TYPES.has(file.type) || /\.(mp4|mov|mkv|webm|avi|m4v)$/i.test(file.name);
@@ -77,6 +109,14 @@ function addFiles(newFiles) {
   renderFiles();
 }
 
+function formatSize(bytes) {
+  if (!bytes) return "0 B";
+  const k = 1024;
+  const sizes = ["B", "KB", "MB", "GB"];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  return (bytes / Math.pow(k, i)).toFixed(1) + " " + sizes[i];
+}
+
 function renderFiles() {
   fileList.replaceChildren();
   if (!files.length) {
@@ -87,7 +127,15 @@ function renderFiles() {
   } else {
     files.forEach((file, index) => {
       const item = document.createElement("li");
-      item.innerHTML = `<span>${file.name}</span><button type="button" aria-label="移除 ${file.name}">移除</button>`;
+      const ext = (file.name.split('.').pop() || 'VIDEO').toUpperCase();
+      const sizeStr = formatSize(file.size);
+      item.innerHTML = `
+        <span>${file.name}</span>
+        <div class="file-meta">
+          <span class="file-badge">${ext} · ${sizeStr}</span>
+          <button type="button" aria-label="移除 ${file.name}">移除</button>
+        </div>
+      `;
       item.querySelector("button").addEventListener("click", () => {
         files.splice(index, 1);
         renderFiles();
@@ -179,7 +227,11 @@ async function loadFFmpeg() {
     throw new Error(`FFmpeg 核心文件加载失败。请刷新页面重试。${detail ? ` ${detail}` : ""}`);
   }
   ffmpeg.on("progress", ({ progress }) => setProgress(progress * 100));
-  ffmpeg.on("log", ({ message }) => console.log("[FFmpeg]", message));
+  ffmpeg.on("log", ({ message }) => {
+    ffmpegLogs.push(message);
+    if (ffmpegLogs.length > 50) ffmpegLogs.shift();
+    console.log("[FFmpeg]", message);
+  });
 }
 
 let watermarkCached = false;
@@ -236,6 +288,12 @@ async function processFile(file, index, total) {
   // 2. 极少数源视频音频格式无法直接存入 MP4 容器时，自动回退转码 AAC
   if (!success) {
     status.textContent = `视频 ${index + 1}/${total} 音频格式特殊，正在兼容处理...`;
+    // 更新音频模式指示器
+    audioModeTag.textContent = "音频流：AAC 兼容转码 (源格式不支持直拷)";
+    audioModeTag.style.background = "#3a2818";
+    audioModeTag.style.borderColor = "#805828";
+    audioModeTag.style.color = "#f0b475";
+    
     try {
       ffmpeg.terminate();
       ffmpeg = new FFmpeg();
@@ -272,11 +330,20 @@ async function startProcessing() {
   startButton.disabled = true;
   clearButton.disabled = true;
   input.disabled = true;
+  errorCard.style.display = "none";
+  errorSummary.textContent = "";
+  errorLogContent.textContent = "";
   setProgress(0);
   try {
     await loadFFmpeg();
     const totalStart = performance.now();
     for (let index = 0; index < files.length; index += 1) {
+      // Reset audio mode tag per file
+      audioModeTag.textContent = "音频流：直接复制 (无损原声直出)";
+      audioModeTag.style.background = "";
+      audioModeTag.style.borderColor = "";
+      audioModeTag.style.color = "";
+      
       await processFile(files[index], index, files.length);
     }
     const totalElapsed = ((performance.now() - totalStart) / 1000).toFixed(1);
@@ -284,8 +351,35 @@ async function startProcessing() {
     setProgress(100);
   } catch (error) {
     console.error(error);
-    status.textContent = "处理失败，请查看浏览器控制台";
-    alert(`处理失败：${error.message || error}`);
+    status.textContent = "处理失败，详细诊断结果已显示在下方";
+    
+    // Parse error logs to display user-friendly diagnostic message
+    let reason = "处理过程中发生未知错误。";
+    const errStr = String(error?.message || error || "");
+    const logsTail = ffmpegLogs.slice(-25).join("\\n");
+    
+    if (errStr.includes("SharedArrayBuffer") || logsTail.includes("SharedArrayBuffer")) {
+      reason = "浏览器环境未开启 SharedArrayBuffer 多线程支持。建议刷新页面或在本地测试。";
+    } else if (errStr.includes("memory") || errStr.includes("Out of Memory") || logsTail.includes("Out of Memory") || logsTail.includes("OOM")) {
+      reason = "浏览器 WebAssembly 内存不足。处理过大或超高清视频时耗尽了内存，建议关闭其他标签页或处理较小的视频。";
+    } else if (logsTail.includes("Invalid data found") || logsTail.includes("moov atom not found")) {
+      reason = "视频文件数据损坏或格式不受支持，FFmpeg 无法正常解码该视频。";
+    } else if (errStr.includes("startsWith") || errStr.includes("Aborted") || logsTail.includes("Error")) {
+      reason = "FFmpeg 底层执行异常终止。通常是由于视频容器格式不规范或音频通道不支持导致。";
+    } else {
+      reason = `执行失败：${errStr}`;
+    }
+    
+    errorSummary.innerHTML = `<strong>诊断原因：</strong> ${reason}`;
+    errorLogContent.textContent = [
+      `[错误信息] ${errStr}`,
+      `[系统堆栈] ${error?.stack || "无"}`,
+      `\n--- 最近 25 行 FFmpeg 运行日志 ---`,
+      logsTail || "(暂无 FFmpeg 日志)"
+    ].join("\n");
+    
+    errorCard.style.display = "block";
+    errorCard.scrollIntoView({ behavior: "smooth", block: "nearest" });
   } finally {
     startButton.disabled = !files.length;
     clearButton.disabled = false;

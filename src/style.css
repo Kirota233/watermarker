@@ -32,8 +32,106 @@ h1 { font-size: clamp(30px, 6vw, 52px); line-height: 1.05; margin: 0; letter-spa
 .progress { height: 4px; margin-top: 9px; background: #393530; border-radius: 10px; overflow: hidden; }
 #progress-bar { width: 0; height: 100%; background: #d2b181; transition: width .2s; }
 .note, .privacy { color: #827c73; font-size: 12px; line-height: 1.6; }
-.note { margin: 20px 0 0; }
+.note { margin: 16px 0 0; }
 .privacy { text-align: center; margin-top: 18px; }
+
+/* 模式指示与参数标签 */
+.mode-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 20px;
+}
+.tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  background: #2b2722;
+  border: 1px solid #3e3a34;
+  color: #c9c2b7;
+  font-size: 12px;
+  padding: 5px 11px;
+  border-radius: 7px;
+}
+.tag-highlight {
+  background: #342c1e;
+  border-color: #7b653f;
+  color: #e5be82;
+  font-weight: 600;
+}
+.tag-audio {
+  background: #1c2a21;
+  border-color: #2e4d36;
+  color: #8edba3;
+  font-weight: 500;
+}
+
+/* 错误日志卡片 */
+.error-card {
+  margin-top: 20px;
+  background: #2b1717;
+  border: 1px solid #732626;
+  border-radius: 10px;
+  padding: 14px 16px;
+  color: #f1c0c0;
+  font-size: 13px;
+}
+.error-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-weight: 700;
+  color: #ff9191;
+  margin-bottom: 8px;
+}
+.error-summary {
+  margin: 0 0 10px;
+  line-height: 1.5;
+  color: #f9dcdc;
+  word-break: break-all;
+}
+.error-details {
+  border-top: 1px dashed #592929;
+  padding-top: 8px;
+  font-size: 12px;
+}
+.error-details summary {
+  cursor: pointer;
+  color: #e09e9e;
+  margin-bottom: 6px;
+  user-select: none;
+}
+.error-log-content {
+  background: #170b0b;
+  border: 1px solid #4a1d1d;
+  border-radius: 6px;
+  padding: 10px;
+  color: #ffb8b8;
+  font-family: Consolas, "Cascadia Code", monospace;
+  font-size: 11px;
+  line-height: 1.45;
+  max-height: 220px;
+  overflow-y: auto;
+  white-space: pre-wrap;
+  word-break: break-all;
+  margin: 6px 0 0;
+}
+
+/* 待处理列表格式信息 */
+.file-meta {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+.file-badge {
+  background: #2b2722;
+  border: 1px solid #443e37;
+  padding: 2px 7px;
+  border-radius: 5px;
+  font-size: 11px;
+  color: #b9a68d;
+}
+
 @media (max-width: 560px) {
   .shell { width: min(100% - 22px, 820px); padding-top: 38px; }
   .panel { padding: 13px; }
