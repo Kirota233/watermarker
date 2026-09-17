@@ -1,5 +1,6 @@
 import { FFmpeg } from "@ffmpeg/ffmpeg";
-import { fetchFile, toBlobURL } from "@ffmpeg/util";
+import { toBlobURL, fetchFile } from "@ffmpeg/util";
+import { Combinator, MP4Clip, ImgClip, OffscreenSprite } from "@webav/av-cliper";
 import "./style.css";
 
 const VIDEO_TYPES = new Set([
@@ -27,10 +28,18 @@ app.innerHTML = `
         <span class="drop-icon">＋</span>
         <strong>拖放视频到这里</strong>
         <span>或点击选择视频，可一次处理多个文件</span>
-      </label>
-      
       <!-- Settings Bar -->
-      <div class="settings-bar">
+      <div class="settings-bar" id="engine-bar">
+        <label class="select-tag">
+          <span style="background: #3a2818; color: #f0b475; border-color: #805828;">处理引擎</span>
+          <select id="setting-engine" style="color: #f0b475;">
+            <option value="webav">⚡ WebAV 硬件加速 (极速/推荐)</option>
+            <option value="ffmpeg">FFmpeg WASM (高兼容/全功能)</option>
+          </select>
+        </label>
+      </div>
+
+      <div class="settings-bar" id="ffmpeg-settings-bar" style="display: none;">
         <label class="select-tag">
           <span>加速模式</span>
           <select id="setting-threads" ${!canUseMT ? 'disabled' : ''}>
@@ -109,9 +118,19 @@ const errorLogContent = document.querySelector("#error-log-content");
 const closeErrorBtn = document.querySelector("#close-error");
 
 // Settings selectors
+const settingEngine = document.querySelector("#setting-engine");
+const ffmpegSettingsBar = document.querySelector("#ffmpeg-settings-bar");
 const settingThreads = document.querySelector("#setting-threads");
 const settingCrf = document.querySelector("#setting-crf");
 const settingAudio = document.querySelector("#setting-audio");
+
+settingEngine.addEventListener("change", (e) => {
+  if (e.target.value === "ffmpeg") {
+    ffmpegSettingsBar.style.display = "flex";
+  } else {
+    ffmpegSettingsBar.style.display = "none";
+  }
+});
 
 closeErrorBtn.addEventListener("click", () => {
   errorCard.style.display = "none";
@@ -360,6 +379,74 @@ async function processFile(file, index, total) {
   status.textContent = `已完成 ${index + 1}/${total}：${file.name}（耗时 ${elapsed}s）`;
 }
 
+async function processWebAV(fileObj, index, total) {
+  const t0 = performance.now();
+  status.textContent = `准备中 ${index + 1}/${total}：${fileObj.name} (WebAV 硬件加速)`;
+  
+  // 1. 初始化视频 Clip
+  const mp4Clip = new MP4Clip(fileObj.stream());
+  await mp4Clip.ready;
+  const { width, height } = mp4Clip.meta;
+
+  // 2. 初始化水印图片 Clip
+  const imgResp = await fetch(watermarkUrl);
+  const imgBlob = await imgResp.blob();
+  const imgBitmap = await createImageBitmap(imgBlob);
+  const imgClip = new ImgClip(imgBitmap);
+  await imgClip.ready;
+
+  // 3. 构建精灵贴图 (Sprites)
+  const videoSprite = new OffscreenSprite(mp4Clip);
+  
+  const imgSprite = new OffscreenSprite(imgClip);
+  // 全屏覆盖水印
+  imgSprite.rect.w = width;
+  imgSprite.rect.h = height;
+  imgSprite.rect.x = 0;
+  imgSprite.rect.y = 0;
+
+  // 4. 初始化合成器 (Combinator)
+  const com = new Combinator({
+    width,
+    height,
+    videoCodec: "avc1.42E032", // H.264
+  });
+
+  await com.addSprite(videoSprite, { main: true }); // main 给定视频长度
+  await com.addSprite(imgSprite);
+
+  com.on("OutputProgress", (v) => {
+    setProgress(v * 100);
+    status.textContent = `处理中 ${index + 1}/${total}：${fileObj.name} (GPU 硬件加速 - ${Math.floor(v * 100)}%)`;
+  });
+
+  com.on("error", (err) => {
+    console.error("WebAV 合成失败", err);
+    throw err;
+  });
+
+  // 5. 导出并下载流
+  const outStream = com.output();
+  const reader = outStream.getReader();
+  const chunks = [];
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    chunks.push(value);
+  }
+  const outBlob = new Blob(chunks, { type: "video/mp4" });
+  
+  const url = URL.createObjectURL(outBlob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = `${fileObj.name.replace(/\.[^.]+$/, "")}样片_GPU.mp4`;
+  link.click();
+  URL.revokeObjectURL(url);
+  
+  const elapsed = ((performance.now() - t0) / 1000).toFixed(1);
+  status.textContent = `已完成 ${index + 1}/${total}：${fileObj.name}（耗时 ${elapsed}s）`;
+}
+
 async function startProcessing() {
   if (!files.length || startButton.disabled) return;
   startButton.disabled = true;
@@ -369,12 +456,23 @@ async function startProcessing() {
   errorSummary.textContent = "";
   errorLogContent.textContent = "";
   setProgress(0);
+  
+  const engine = settingEngine.value;
+
   try {
-    await loadFFmpeg();
-    const totalStart = performance.now();
-    for (let index = 0; index < files.length; index += 1) {
-      await processFile(files[index], index, files.length);
+    if (engine === "ffmpeg") {
+      await loadFFmpeg();
     }
+    const totalStart = performance.now();
+    
+    for (let index = 0; index < files.length; index += 1) {
+      if (engine === "webav") {
+        await processWebAV(files[index], index, files.length);
+      } else {
+        await processFile(files[index], index, files.length);
+      }
+    }
+    
     const totalElapsed = ((performance.now() - totalStart) / 1000).toFixed(1);
     status.textContent = `全部完成（总耗时 ${totalElapsed}s），文件已下载到浏览器默认下载目录`;
     setProgress(100);
