@@ -8,9 +8,7 @@
 body { margin: 0; min-width: 320px; }
 .shell { width: min(820px, calc(100% - 32px)); margin: 0 auto; padding: 8vh 0 40px; }
 .hero { margin-bottom: 28px; }
-.eyebrow { color: #b9a68d; font-size: 12px; letter-spacing: .18em; margin: 0 0 12px; }
 h1 { font-size: clamp(30px, 6vw, 52px); line-height: 1.05; margin: 0; letter-spacing: -.04em; }
-.subtitle { color: #a9a39b; margin: 14px 0 0; font-size: 16px; }
 .panel { background: #211f1c; border: 1px solid #3b3833; border-radius: 20px; padding: 20px; box-shadow: 0 20px 70px #0005; }
 .drop-zone { min-height: 210px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 9px; border: 1px dashed #786b59; border-radius: 14px; color: #a9a39b; cursor: pointer; transition: .2s; }
 .drop-zone:hover, .drop-zone.is-dragging { background: #2b2722; border-color: #d2b181; color: #f4f1ea; }
@@ -31,39 +29,45 @@ h1 { font-size: clamp(30px, 6vw, 52px); line-height: 1.05; margin: 0; letter-spa
 .status-wrap { flex: 1; min-width: 0; color: #a9a39b; font-size: 13px; }
 .progress { height: 4px; margin-top: 9px; background: #393530; border-radius: 10px; overflow: hidden; }
 #progress-bar { width: 0; height: 100%; background: #d2b181; transition: width .2s; }
-.note, .privacy { color: #827c73; font-size: 12px; line-height: 1.6; }
-.note { margin: 16px 0 0; }
-.privacy { text-align: center; margin-top: 18px; }
-
-/* 模式指示与参数标签 */
-.mode-tags {
+.settings-bar {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
-  margin-top: 20px;
+  gap: 12px;
+  margin: 16px 0 20px;
 }
-.tag {
+.select-tag {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
   background: #2b2722;
   border: 1px solid #3e3a34;
-  color: #c9c2b7;
+  border-radius: 6px;
+  overflow: hidden;
   font-size: 12px;
-  padding: 5px 11px;
-  border-radius: 7px;
+  color: #a9a39b;
 }
-.tag-highlight {
-  background: #342c1e;
-  border-color: #7b653f;
-  color: #e5be82;
-  font-weight: 600;
-}
-.tag-audio {
-  background: #1c2a21;
-  border-color: #2e4d36;
-  color: #8edba3;
+.select-tag span {
+  padding: 7px 10px;
+  background: #201d19;
+  border-right: 1px solid #3e3a34;
   font-weight: 500;
+}
+.select-tag select {
+  background: transparent;
+  color: #d8d1c7;
+  border: none;
+  padding: 7px 10px;
+  outline: none;
+  font-family: inherit;
+  cursor: pointer;
+  -webkit-appearance: none;
+  appearance: none;
+}
+.select-tag select:focus {
+  background: #36322c;
+}
+.select-tag select:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
 }
 
 /* 错误日志卡片 */

@@ -19,9 +19,7 @@ const app = document.querySelector("#app");
 app.innerHTML = `
   <main class="shell">
     <section class="hero">
-      <p class="eyebrow">本地视频工具</p>
       <h1>一起加样片水印吧！</h1>
-      <p class="subtitle">视频在你的浏览器本地处理，不上传服务器。</p>
     </section>
     <section class="panel">
       <label class="drop-zone" id="drop-zone" for="video-input">
@@ -30,6 +28,38 @@ app.innerHTML = `
         <strong>拖放视频到这里</strong>
         <span>或点击选择视频，可一次处理多个文件</span>
       </label>
+      
+      <!-- Settings Bar -->
+      <div class="settings-bar">
+        <label class="select-tag">
+          <span>加速模式</span>
+          <select id="setting-threads" ${!canUseMT ? 'disabled' : ''}>
+            ${canUseMT ? `<option value="auto">自动多核 (推荐)</option>` : `<option value="1">单线程 (环境受限)</option>`}
+            ${canUseMT ? `
+              <option value="1">单线程</option>
+              <option value="2">2 线程</option>
+              <option value="4">4 线程</option>
+              <option value="8">8 线程</option>
+            ` : ''}
+          </select>
+        </label>
+        <label class="select-tag">
+          <span>画质 (CRF)</span>
+          <select id="setting-crf">
+            <option value="18">高 (18 - 较慢)</option>
+            <option value="23" selected>中 (23 - 推荐)</option>
+            <option value="28">低 (28 - 极速)</option>
+          </select>
+        </label>
+        <label class="select-tag">
+          <span>音频模式</span>
+          <select id="setting-audio">
+            <option value="auto">智能直拷 (推荐)</option>
+            <option value="aac">强制转码 (AAC)</option>
+          </select>
+        </label>
+      </div>
+
       <div class="file-area">
         <div class="section-heading">
           <span>待处理视频</span>
@@ -47,16 +77,6 @@ app.innerHTML = `
         </div>
       </div>
 
-      <!-- 当前模式与运行参数指示 -->
-      <div class="mode-tags">
-        <span class="tag tag-highlight" id="thread-mode-tag">
-          ${canUseMT ? `⚡ 多线程加速 (${threadCount} 线程)` : "单线程模式"}
-        </span>
-        <span class="tag" id="video-codec-tag">视频编码：H.264 (CRF 23 · ultrafast)</span>
-        <span class="tag tag-audio" id="audio-mode-tag">音频流：直接复制 (无损原声直出)</span>
-        <span class="tag">输出封装：MP4 (原文件名样片)</span>
-      </div>
-
       <!-- 报错日志与原因诊断卡片 -->
       <div id="error-card" class="error-card" style="display: none;">
         <div class="error-header">
@@ -69,10 +89,7 @@ app.innerHTML = `
           <pre id="error-log-content" class="error-log-content"></pre>
         </details>
       </div>
-
-      <p class="note">输出文件将保存到浏览器的下载目录。水印会强制拉伸到每个视频的完整分辨率。</p>
     </section>
-    <p class="privacy">本页面只负责提供工具。视频、音频和处理结果均留在本机浏览器中。</p>
   </main>
 `;
 
@@ -86,11 +103,15 @@ const clearButton = document.querySelector("#clear-button");
 const startButton = document.querySelector("#start-button");
 const status = document.querySelector("#status");
 const progressBar = document.querySelector("#progress-bar");
-const audioModeTag = document.querySelector("#audio-mode-tag");
 const errorCard = document.querySelector("#error-card");
 const errorSummary = document.querySelector("#error-summary");
 const errorLogContent = document.querySelector("#error-log-content");
 const closeErrorBtn = document.querySelector("#close-error");
+
+// Settings selectors
+const settingThreads = document.querySelector("#setting-threads");
+const settingCrf = document.querySelector("#setting-crf");
+const settingAudio = document.querySelector("#setting-audio");
 
 closeErrorBtn.addEventListener("click", () => {
   errorCard.style.display = "none";
@@ -243,10 +264,23 @@ async function processFile(file, index, total) {
 
   await ffmpeg.writeFile(inputName, await fetchFile(file));
 
-  // Only write watermark once — it persists in the virtual FS
   if (!watermarkCached) {
     await ffmpeg.writeFile("watermark.png", await fetchFile(watermarkUrl));
     watermarkCached = true;
+  }
+
+  const crfVal = settingCrf.value || "23";
+  let threadsVal = "1";
+  let threadsDisplay = "单线程";
+  if (canUseMT) {
+    if (settingThreads.value === "auto") {
+      const maxT = Math.min(navigator.hardwareConcurrency || 4, 8);
+      threadsVal = maxT.toString();
+      threadsDisplay = `${maxT}线程`;
+    } else {
+      threadsVal = settingThreads.value;
+      threadsDisplay = `${threadsVal}线程`;
+    }
   }
 
   const getExecArgs = (audioCodec) => {
@@ -259,48 +293,49 @@ async function processFile(file, index, total) {
       "-map", "0:a?",
       "-c:v", "libx264",
       "-preset", "ultrafast",
-      "-crf", "23",
+      "-crf", crfVal,
       "-tune", "fastdecode",
       "-c:a", audioCodec,
     ];
 
-    // Multi-thread encoding flags (cap at 8 for WASM stability)
     if (canUseMT) {
-      const threadCount = Math.min(navigator.hardwareConcurrency || 4, 8).toString();
-      args.push("-threads", threadCount);
+      args.push("-threads", threadsVal);
     }
-
     args.push(outputName);
     return args;
   };
 
-  // 1. 优先直接复制音频（copy），不重新编码、原音质无损输出，速度最快
+  const audioPref = settingAudio.value; // 'auto' or 'aac'
   let success = false;
-  try {
-    const ret = await ffmpeg.exec(getExecArgs("copy"));
-    if (ret === 0) {
-      success = true;
+  let activeAudioCodec = "直拷";
+
+  const updateStatus = (ac) => {
+    status.textContent = `处理中 ${index + 1}/${total}：${file.name} (${threadsDisplay} · CRF${crfVal} · 音频${ac})`;
+  };
+
+  if (audioPref === "auto") {
+    updateStatus("直拷");
+    try {
+      const ret = await ffmpeg.exec(getExecArgs("copy"));
+      if (ret === 0) success = true;
+    } catch (err) {
+      console.warn("音频直接复制遇到兼容问题，准备回退", err);
     }
-  } catch (err) {
-    console.warn("音频直接复制遇到流兼容问题，准备回退兼容模式", err);
   }
 
-  // 2. 极少数源视频音频格式无法直接存入 MP4 容器时，自动回退转码 AAC
   if (!success) {
-    status.textContent = `视频 ${index + 1}/${total} 音频格式特殊，正在兼容处理...`;
-    // 更新音频模式指示器
-    audioModeTag.textContent = "音频流：AAC 兼容转码 (源格式不支持直拷)";
-    audioModeTag.style.background = "#3a2818";
-    audioModeTag.style.borderColor = "#805828";
-    audioModeTag.style.color = "#f0b475";
-    
+    activeAudioCodec = "AAC转码";
+    updateStatus(activeAudioCodec);
     try {
-      ffmpeg.terminate();
-      ffmpeg = new FFmpeg();
-      await loadFFmpeg();
-      await ffmpeg.writeFile(inputName, await fetchFile(file));
-      await ffmpeg.writeFile("watermark.png", await fetchFile(watermarkUrl));
-      watermarkCached = true;
+      if (audioPref === "auto") {
+        // Need to reload if we tried copy and it failed
+        ffmpeg.terminate();
+        ffmpeg = new FFmpeg();
+        await loadFFmpeg();
+        await ffmpeg.writeFile(inputName, await fetchFile(file));
+        await ffmpeg.writeFile("watermark.png", await fetchFile(watermarkUrl));
+        watermarkCached = true;
+      }
       const retFallback = await ffmpeg.exec(getExecArgs("aac"));
       if (retFallback !== 0) {
         throw new Error(`处理失败，FFmpeg 退出码：${retFallback}`);
@@ -338,12 +373,6 @@ async function startProcessing() {
     await loadFFmpeg();
     const totalStart = performance.now();
     for (let index = 0; index < files.length; index += 1) {
-      // Reset audio mode tag per file
-      audioModeTag.textContent = "音频流：直接复制 (无损原声直出)";
-      audioModeTag.style.background = "";
-      audioModeTag.style.borderColor = "";
-      audioModeTag.style.color = "";
-      
       await processFile(files[index], index, files.length);
     }
     const totalElapsed = ((performance.now() - totalStart) / 1000).toFixed(1);
