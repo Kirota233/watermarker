@@ -39,6 +39,14 @@ app.innerHTML = `
             <option value="ffmpeg">FFmpeg WASM (高兼容/全功能)</option>
           </select>
         </label>
+        <label class="select-tag">
+          <span>画质级别</span>
+          <select id="setting-crf">
+            <option value="18">高 (大体积)</option>
+            <option value="23" selected>中 (均衡/推荐)</option>
+            <option value="28">低 (极速小体积)</option>
+          </select>
+        </label>
       </div>
 
       <div class="settings-bar" id="ffmpeg-settings-bar" style="display: none;">
@@ -52,14 +60,6 @@ app.innerHTML = `
               <option value="4">4 线程</option>
               <option value="8">8 线程</option>
             ` : ''}
-          </select>
-        </label>
-        <label class="select-tag">
-          <span>画质 (CRF)</span>
-          <select id="setting-crf">
-            <option value="18">高 (18 - 较慢)</option>
-            <option value="23" selected>中 (23 - 推荐)</option>
-            <option value="28">低 (28 - 极速)</option>
           </select>
         </label>
         <label class="select-tag">
@@ -460,10 +460,21 @@ async function processWebAV(fileObj, index, total) {
   imgSprite.rect.y = 0;
 
   // 4. 初始化合成器 (Combinator)
+  const crfVal = settingCrf.value || "23";
+  let targetBitrate = 5e6; // 默认中画质基准 (约 5Mbps for 1080p)
+  if (crfVal === "18") targetBitrate = 12e6; // 高画质
+  if (crfVal === "28") targetBitrate = 2e6;  // 低画质
+  
+  // 根据实际分辨率动态缩放码率
+  const area = width * height;
+  const baseArea = 1920 * 1080;
+  const finalBitrate = Math.round(targetBitrate * (area / baseArea));
+
   const com = new Combinator({
     width,
     height,
     videoCodec: "avc1.42E032", // H.264
+    bitrate: finalBitrate,
   });
 
   await com.addSprite(videoSprite, { main: true }); // main 给定视频长度
@@ -501,7 +512,7 @@ async function processWebAV(fileObj, index, total) {
     progressValue = v;
     lastProgressTime = performance.now();
     setProgress(v * 100);
-    status.textContent = `处理中 ${index + 1}/${total}：${fileObj.name} (GPU 硬件加速 - ${Math.floor(v * 100)}%)`;
+    status.textContent = `处理中 ${index + 1}/${total}：${fileObj.name} (GPU硬件加速 · 画质${crfVal} - ${Math.floor(v * 100)}%)`;
   });
 
   com.on("error", (err) => {
@@ -522,7 +533,7 @@ async function processWebAV(fileObj, index, total) {
   const url = URL.createObjectURL(outBlob);
   const link = document.createElement("a");
   link.href = url;
-  link.download = `${fileObj.name.replace(/\.[^.]+$/, "")}样片_GPU.mp4`;
+  link.download = `${fileObj.name.replace(/\.[^.]+$/, "")}样片.mp4`;
   link.click();
   URL.revokeObjectURL(url);
   
