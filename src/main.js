@@ -108,13 +108,6 @@ function getSources() {
   if (canUseMT) {
     return [
       {
-        name: "本站多线程",
-        core: "/ffmpeg-mt/ffmpeg-core.js",
-        wasm: "/ffmpeg-mt/ffmpeg-core.wasm",
-        workerURL: "/ffmpeg-mt/ffmpeg-core.worker.js",
-        direct: true,
-      },
-      {
         name: "国内 npm 镜像 (多线程)",
         core: "https://npm.elemecdn.com/@ffmpeg/core-mt@0.12.10/dist/esm/ffmpeg-core.js",
         wasm: "https://npm.elemecdn.com/@ffmpeg/core-mt@0.12.10/dist/esm/ffmpeg-core.wasm",
@@ -130,18 +123,12 @@ function getSources() {
   }
   return [
     {
-      name: "本站静态资源",
-      core: "/ffmpeg/ffmpeg-core.js",
-      wasm: "/ffmpeg/ffmpeg-core.wasm",
-      direct: true,
-    },
-    {
-      name: "国内 npm 镜像",
+      name: "国内 npm 镜像 (单线程)",
       core: "https://npm.elemecdn.com/@ffmpeg/core@0.12.10/dist/esm/ffmpeg-core.js",
       wasm: "https://npm.elemecdn.com/@ffmpeg/core@0.12.10/dist/esm/ffmpeg-core.wasm",
     },
     {
-      name: "jsDelivr",
+      name: "jsDelivr (单线程)",
       core: "https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.12.10/dist/esm/ffmpeg-core.js",
       wasm: "https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.12.10/dist/esm/ffmpeg-core.wasm",
     },
