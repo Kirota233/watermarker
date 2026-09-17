@@ -53,6 +53,7 @@ app.innerHTML = `
             <option value="28">低 (极速小体积)</option>
           </select>
         </label>
+        <div id="engine-hint" style="flex-basis: 100%; font-size: 11.5px; color: #827c73; margin-top: -4px;"></div>
       </div>
 
       <div class="settings-bar" id="ffmpeg-settings-bar" style="display: none;">
@@ -135,6 +136,7 @@ const ffmpegSettingsBar = document.querySelector("#ffmpeg-settings-bar");
 const settingThreads = document.querySelector("#setting-threads");
 const settingCrf = document.querySelector("#setting-crf");
 const settingAudio = document.querySelector("#setting-audio");
+const engineHint = document.querySelector("#engine-hint");
 
 settingEngine.addEventListener("change", (e) => {
   if (e.target.value === "ffmpeg") {
@@ -144,7 +146,7 @@ settingEngine.addEventListener("change", (e) => {
   }
 });
 
-// Firefox 兼容性降级处理
+// 动态兼容性降级与提示处理
 if (isFirefox) {
   const webavOpt = settingEngine.querySelector('option[value="webav"]');
   if (webavOpt) {
@@ -153,6 +155,11 @@ if (isFirefox) {
   }
   settingEngine.value = "ffmpeg";
   ffmpegSettingsBar.style.display = "flex";
+  if (engineHint) engineHint.textContent = "💡 提示：Firefox 的隐私策略会拦截硬件加速缓存，已为您固定使用高兼容的 FFmpeg 引擎。";
+} else if (isChromium) {
+  if (engineHint) engineHint.innerHTML = "💡 提示：Edge/Chrome 完美支持极速硬件加速。若遇特殊视频需切回 FFmpeg 模式，系统将强制单线程以防死锁。";
+} else {
+  if (engineHint) engineHint.textContent = "💡 提示：推荐优先体验 WebAV 硬件加速。如遇视频格式报错可切回 FFmpeg 模式保底。";
 }
 
 closeErrorBtn.addEventListener("click", () => {
