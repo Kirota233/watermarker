@@ -179,20 +179,15 @@ async function loadFFmpeg() {
     throw new Error(`FFmpeg 核心文件加载失败。请刷新页面重试。${detail ? ` ${detail}` : ""}`);
   }
   ffmpeg.on("progress", ({ progress }) => setProgress(progress * 100));
+  ffmpeg.on("log", ({ message }) => console.log("[FFmpeg]", message));
 }
 
 let watermarkCached = false;
 
 async function processFile(file, index, total) {
   const t0 = performance.now();
-  
-  // Extract original extension to maintain container format (allows safe audio copy)
-  const match = file.name.match(/\.([^.]+)$/);
-  const ext = match ? match[1].toLowerCase() : "mp4";
-  const outputExt = ["mp4", "mov", "mkv", "webm", "avi", "m4v"].includes(ext) ? ext : "mp4";
-  
   const inputName = `input_${index}_${file.name.replace(/[^a-zA-Z0-9._-]/g, "_")}`;
-  const outputName = `output_${index}.${outputExt}`;
+  const outputName = `output_${index}.mp4`;
 
   await ffmpeg.writeFile(inputName, await fetchFile(file));
 
@@ -202,43 +197,67 @@ async function processFile(file, index, total) {
     watermarkCached = true;
   }
 
-  const execArgs = [
-    "-i", inputName,
-    "-loop", "1",
-    "-i", "watermark.png",
-    "-filter_complex",
-    "[1:v][0:v]scale2ref=w=main_w:h=main_h[wm][video];[video][wm]overlay=0:0:shortest=1[outv]",
-    "-map", "[outv]",
-    "-map", "0:a?",
-    "-c:v", "libx264",
-    "-preset", "ultrafast",
-    "-crf", "23",
-    "-tune", "fastdecode",
-    "-c:a", "copy",
-    "-shortest",
-  ];
+  const getExecArgs = (audioCodec) => {
+    const args = [
+      "-i", inputName,
+      "-i", "watermark.png",
+      "-filter_complex",
+      "[1:v][0:v]scale2ref=w=main_w:h=main_h[wm][video];[video][wm]overlay=0:0[outv]",
+      "-map", "[outv]",
+      "-map", "0:a?",
+      "-c:v", "libx264",
+      "-preset", "ultrafast",
+      "-crf", "23",
+      "-tune", "fastdecode",
+      "-c:a", audioCodec,
+    ];
 
-  // Multi-thread encoding flags
-  if (canUseMT) {
-    const threadCount = navigator.hardwareConcurrency ? navigator.hardwareConcurrency.toString() : "4";
-    execArgs.push("-threads", threadCount);
+    // Multi-thread encoding flags (cap at 8 for WASM stability)
+    if (canUseMT) {
+      const threadCount = Math.min(navigator.hardwareConcurrency || 4, 8).toString();
+      args.push("-threads", threadCount);
+    }
+
+    args.push(outputName);
+    return args;
+  };
+
+  // 1. 优先直接复制音频（copy），不重新编码、原音质无损输出，速度最快
+  let success = false;
+  try {
+    const ret = await ffmpeg.exec(getExecArgs("copy"));
+    if (ret === 0) {
+      success = true;
+    }
+  } catch (err) {
+    console.warn("音频直接复制遇到流兼容问题，准备回退兼容模式", err);
   }
 
-  execArgs.push(outputName);
-
-  await ffmpeg.exec(execArgs);
+  // 2. 极少数源视频音频格式无法直接存入 MP4 容器时，自动回退转码 AAC
+  if (!success) {
+    status.textContent = `视频 ${index + 1}/${total} 音频格式特殊，正在兼容处理...`;
+    try {
+      ffmpeg.terminate();
+      ffmpeg = new FFmpeg();
+      await loadFFmpeg();
+      await ffmpeg.writeFile(inputName, await fetchFile(file));
+      await ffmpeg.writeFile("watermark.png", await fetchFile(watermarkUrl));
+      watermarkCached = true;
+      const retFallback = await ffmpeg.exec(getExecArgs("aac"));
+      if (retFallback !== 0) {
+        throw new Error(`处理失败，FFmpeg 退出码：${retFallback}`);
+      }
+    } catch (fallbackErr) {
+      throw fallbackErr;
+    }
+  }
 
   const data = await ffmpeg.readFile(outputName);
-  
-  const mimeTypes = {
-    mp4: "video/mp4", mov: "video/quicktime", mkv: "video/x-matroska",
-    webm: "video/webm", avi: "video/x-msvideo", m4v: "video/mp4"
-  };
-  const blob = new Blob([data.buffer], { type: mimeTypes[outputExt] || "video/mp4" });
+  const blob = new Blob([data.buffer], { type: "video/mp4" });
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
   link.href = url;
-  link.download = `${file.name.replace(/\.[^.]+$/, "")}样片.${outputExt}`;
+  link.download = `${file.name.replace(/\.[^.]+$/, "")}样片.mp4`;
   link.click();
   URL.revokeObjectURL(url);
   await ffmpeg.deleteFile(inputName);
