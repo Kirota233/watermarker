@@ -103,7 +103,7 @@ app.innerHTML = `
     </section>
     
     <footer class="footer" style="text-align: center; margin-top: 24px; color: #827c73; font-size: 13px;">
-      <p>🔒 纯本地浏览器处理，视频及数据绝对安全，不上传任何云端服务器。</p>
+      <p>🔒 本地处理，不上传云端</p>
     </footer>
   </main>
 `;
@@ -492,7 +492,7 @@ async function startProcessing() {
     const logsTail = ffmpegLogs.slice(-25).join("\n");
     
     if (errStr.includes("GetDirectory") || errStr.includes("opfs") || errStr.includes("SecurityError")) {
-      reason = "浏览器本地文件系统(OPFS)访问被拒绝。可能由于您使用了“无痕/隐私模式”，或浏览器禁用了本地存储。建议退出无痕模式，或在处理引擎中切换回“FFmpeg WASM (高兼容)”引擎。";
+      reason = "浏览器本地文件系统(OPFS)访问被拒绝。Firefox 等浏览器的严格防追踪/隐私保护功能可能会拦截本地高级缓存。建议：切换回“FFmpeg WASM (高兼容)”引擎，或使用 Chrome/Edge 浏览器体验极致硬件加速。";
     } else if (errStr.includes("SharedArrayBuffer") || logsTail.includes("SharedArrayBuffer")) {
       reason = "浏览器环境未开启 SharedArrayBuffer 多线程支持。建议刷新页面或在本地测试。";
     } else if (errStr.includes("memory") || errStr.includes("Out of Memory") || logsTail.includes("Out of Memory") || logsTail.includes("OOM")) {
