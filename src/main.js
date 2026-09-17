@@ -208,7 +208,7 @@ async function processFile(file, index, total) {
     "-preset", "ultrafast",
     "-crf", "23",
     "-tune", "fastdecode",
-    "-c:a", "copy",
+    "-c:a", "aac",
     "-shortest",
   ];
 
