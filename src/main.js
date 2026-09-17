@@ -13,7 +13,13 @@ const VIDEO_TYPES = new Set([
 const watermarkUrl = "/watermark.png";
 
 /* ---- Detect multi-thread support ---- */
-const canUseMT = typeof SharedArrayBuffer !== "undefined";
+const ua = navigator.userAgent.toLowerCase();
+const isFirefox = ua.includes("firefox");
+const isChromium = ua.includes("chrome") || ua.includes("edg");
+
+// Chromium 内核存在极其严格的 COEP Worker 限制和 WebAssembly 内存共享死锁 Bug，导致 FFmpeg MT 经常假死。
+// 因为 Chromium 有极速的 WebAV 可用，我们在此强制其 FFmpeg 走单线程保底，仅给 Firefox 保留 MT。
+const canUseMT = typeof SharedArrayBuffer !== "undefined" && !isChromium;
 const threadCount = canUseMT ? Math.min(navigator.hardwareConcurrency || 4, 8) : 1;
 
 const app = document.querySelector("#app");
@@ -137,6 +143,17 @@ settingEngine.addEventListener("change", (e) => {
     ffmpegSettingsBar.style.display = "none";
   }
 });
+
+// Firefox 兼容性降级处理
+if (isFirefox) {
+  const webavOpt = settingEngine.querySelector('option[value="webav"]');
+  if (webavOpt) {
+    webavOpt.disabled = true;
+    webavOpt.textContent = "⚡ WebAV 硬件加速 (Firefox 暂不兼容)";
+  }
+  settingEngine.value = "ffmpeg";
+  ffmpegSettingsBar.style.display = "flex";
+}
 
 closeErrorBtn.addEventListener("click", () => {
   errorCard.style.display = "none";
