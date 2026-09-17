@@ -389,6 +389,15 @@ async function processWebAV(fileObj, index, total) {
   const t0 = performance.now();
   status.textContent = `准备中 ${index + 1}/${total}：${fileObj.name} (WebAV 硬件加速)`;
   
+  if (typeof window.VideoEncoder === "undefined" || typeof window.VideoDecoder === "undefined") {
+    throw new Error("当前浏览器不支持 WebCodecs (VideoEncoder/Decoder) 硬件加速 API。建议切换回“FFmpeg WASM”模式，或使用最新版 Chrome/Edge。");
+  }
+
+  const supported = await Combinator.isSupported({ videoCodec: "avc1.42E032" });
+  if (!supported) {
+    throw new Error("当前浏览器环境不支持 H.264 (avc1) 硬件编码（可能因授权或系统限制）。建议切换回“FFmpeg WASM”模式。");
+  }
+
   // 1. 初始化视频 Clip
   const mp4Clip = new MP4Clip(fileObj.stream());
   await mp4Clip.ready;
@@ -421,25 +430,54 @@ async function processWebAV(fileObj, index, total) {
   await com.addSprite(videoSprite, { main: true }); // main 给定视频长度
   await com.addSprite(imgSprite);
 
+  // 5. 导出并下载流
+  const outStream = com.output();
+  const reader = outStream.getReader();
+
+  let lastProgressTime = performance.now();
+  let progressValue = 0;
+  let watchdogInterval;
+  
+  const readLoop = async () => {
+    const chunks = [];
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      chunks.push(value);
+    }
+    return chunks;
+  };
+
+  const watchdogPromise = new Promise((_, reject) => {
+    watchdogInterval = setInterval(() => {
+      if (progressValue < 1 && performance.now() - lastProgressTime > 15000) {
+        clearInterval(watchdogInterval);
+        reader.cancel("Watchdog timeout");
+        reject(new Error("硬件加速引擎长时间无响应 (可能由于浏览器底层 WebCodecs 兼容性问题)。请在上方处理引擎中切换回“FFmpeg WASM”模式重试。"));
+      }
+    }, 2000);
+  });
+
   com.on("OutputProgress", (v) => {
+    progressValue = v;
+    lastProgressTime = performance.now();
     setProgress(v * 100);
     status.textContent = `处理中 ${index + 1}/${total}：${fileObj.name} (GPU 硬件加速 - ${Math.floor(v * 100)}%)`;
   });
 
   com.on("error", (err) => {
+    clearInterval(watchdogInterval);
     console.error("WebAV 合成失败", err);
     throw err;
   });
 
-  // 5. 导出并下载流
-  const outStream = com.output();
-  const reader = outStream.getReader();
-  const chunks = [];
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    chunks.push(value);
+  let chunks;
+  try {
+    chunks = await Promise.race([readLoop(), watchdogPromise]);
+  } finally {
+    clearInterval(watchdogInterval);
   }
+  
   const outBlob = new Blob(chunks, { type: "video/mp4" });
   
   const url = URL.createObjectURL(outBlob);
